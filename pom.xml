@@ -1,0 +1,87 @@
+<!-- Licensed to the Apache Software Foundation (ASF) under one or more contributor 
+	license agreements. See the NOTICE file distributed with this work for additional 
+	information regarding copyright ownership. The ASF licenses this file to 
+	you under the Apache License, Version 2.0 (the "License"); you may not use 
+	this file except in compliance with the License. You may obtain a copy of 
+	the License at http://www.apache.org/licenses/LICENSE-2.0 Unless required 
+	by applicable law or agreed to in writing, software distributed under the 
+	License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS 
+	OF ANY KIND, either express or implied. See the License for the specific 
+	language governing permissions and limitations under the License. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>flink-hello-world</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Flink Hello World</name>
+    <groupId>com.tencent.cloud.oceanus</groupId>
+    <version>1.0.0</version>
+
+    <properties>
+        <flink.version>1.11.0</flink.version>
+        <scala.binary.version>2.11</scala.binary.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-streaming-java_2.11</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-streaming-scala_2.11</artifactId>
+            <version>${flink.version}</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.1</version>
+                <configuration>
+                    <source>8</source> <!-- If you want to use Java 8, change this to "1.8" -->
+                    <target>8</target> <!-- If you want to use Java 8, change this to "1.8" -->
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
+        <!-- If you want to use Java 8 Lambda Expressions uncomment the following
+            lines -->
+        <!-- <pluginManagement> <plugins> <plugin> <artifactId>maven-compiler-plugin</artifactId>
+            <configuration> <source>1.8</source> <target>1.8</target> <compilerId>jdt</compilerId>
+            </configuration> <dependencies> <dependency> <groupId>org.eclipse.tycho</groupId>
+            <artifactId>tycho-compiler-jdt</artifactId> <version>0.21.0</version> </dependency>
+            </dependencies> </plugin> <plugin> <groupId>org.eclipse.m2e</groupId> <artifactId>lifecycle-mapping</artifactId>
+            <version>1.0.0</version> <configuration> <lifecycleMappingMetadata> <pluginExecutions>
+            <pluginExecution> <pluginExecutionFilter> <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-assembly-plugin</artifactId> <versionRange>[2.4,)</versionRange>
+            <goals> <goal>single</goal> </goals> </pluginExecutionFilter> <action> <ignore/>
+            </action> </pluginExecution> <pluginExecution> <pluginExecutionFilter> <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId> <versionRange>[3.1,)</versionRange>
+            <goals> <goal>testCompile</goal> <goal>compile</goal> </goals> </pluginExecutionFilter>
+            <action> <ignore/> </action> </pluginExecution> </pluginExecutions> </lifecycleMappingMetadata>
+            </configuration> </plugin> </plugins> </pluginManagement> -->
+    </build>
+</project>
