@@ -1,8 +1,23 @@
 # flink-hello-world
-Flink 示例程序包, 用于快速构建和运行一个 Flink JAR 作业。
+Flink 示例程序包（自定义函数 UDF、自定义 Source 和 Sink 等），可扩展 Flink 程序的功能。
 
-目前包含如下用例：
+
+
+## Flink 程序示例
+
 1. WordCount
-2. DecodeLatin1 示例 UDF
-3. EncodeLatin1 示例 UDF
-4. PrintChar 示例 UDF
+
+   
+
+## UDF 示例
+
+1. DecodeLatin1
+2. EncodeLatin1
+3. PrintChar
+
+
+
+## Sink 示例
+
+1. LoggerTableSinkFactory
+
