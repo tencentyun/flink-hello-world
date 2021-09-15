@@ -14,7 +14,7 @@ Flink 示例程序包（自定义函数 UDF、自定义 Source 和 Sink 等）�
 1. DecodeLatin1
 2. EncodeLatin1
 3. PrintChar
-
+4. EnhancedSplitIndex
 
 
 ## Sink 示例
