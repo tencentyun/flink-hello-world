@@ -86,12 +86,12 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
         final ReadableConfig options = helper.getOptions();
         helper.validate();
         Class clazz = context.getClass();
-        Method m1 = null;
+        Method method = null;
         CatalogTable table = null;
         try {
-            m1 = clazz.getDeclaredMethod("getCatalogTable");
-            m1.setAccessible(true);
-            table = (CatalogTable) m1.invoke(context);
+            method = clazz.getDeclaredMethod("getCatalogTable");
+            method.setAccessible(true);
+            table = (CatalogTable) method.invoke(context);
         } catch (Exception e) {
             LOGGER.error(e.getMessage(), e);
         }
@@ -123,8 +123,8 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 
         @Override
         public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
-            Slf4jSink.Builder build = Slf4jSink.builder().setFieldDataTypes(tableSchema.getFieldDataTypes()).setPrintIdentifier(printIdentifier);
-            return SinkFunctionProvider.of(build.build());
+            Slf4jSink.Builder builder = Slf4jSink.builder().setFieldDataTypes(tableSchema.getFieldDataTypes()).setPrintIdentifier(printIdentifier);
+            return SinkFunctionProvider.of(builder.build());
         }
 
         @Override
@@ -178,7 +178,7 @@ class Slf4jSink<T> implements SinkFunction<T> {
     @Override
     public void invoke(T value, Context context) {
         StringBuilder builder = new StringBuilder();
-        builder.append("====== " + printIdentifier);
+        builder.append(printIdentifier);
         RowData row = (RowData)value;
         builder.append("-toString: ");
         builder.append(toString(row));
