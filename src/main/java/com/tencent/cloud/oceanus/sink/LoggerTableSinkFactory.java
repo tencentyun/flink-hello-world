@@ -55,169 +55,172 @@ import static org.apache.flink.table.data.RowData.createFieldGetter;
 @PublicEvolving
 public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(LoggerTableSinkFactory.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(LoggerTableSinkFactory.class);
 
-    public static final String IDENTIFIER = "logger";
-    public static final ConfigOption<String> PRINT_IDENTIFIER = ConfigOptions
-        .key("print-identifier")
-        .stringType()
-        .defaultValue("")
-        .withDescription("Message that identify logger and is prefixed to the output of the value.");
-    @Override
-    public String factoryIdentifier() {
-        return IDENTIFIER;
-    }
+	public static final String IDENTIFIER = "logger";
+	public static final ConfigOption<String> PRINT_IDENTIFIER = ConfigOptions
+		.key("print-identifier")
+		.stringType()
+		.defaultValue("")
+		.withDescription("Message that identify logger and is prefixed to the output of the value.");
 
-    @Override
-    public Set<ConfigOption<?>> requiredOptions() {
-        return new HashSet<>();
-    }
+	@Override
+	public String factoryIdentifier() {
+		return IDENTIFIER;
+	}
 
-    @Override
-    public Set<ConfigOption<?>> optionalOptions() {
-        Set<ConfigOption<?>> optionalOptions = new HashSet<>();
-        optionalOptions.add(PRINT_IDENTIFIER);
-        return optionalOptions;
-    }
+	@Override
+	public Set<ConfigOption<?>> requiredOptions() {
+		return new HashSet<>();
+	}
 
-    @Override
-    public DynamicTableSink createDynamicTableSink(Context context) {
-        final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
-        final ReadableConfig options = helper.getOptions();
-        helper.validate();
-        Class clazz = context.getClass();
-        Method method = null;
-        CatalogTable table = null;
-        try {
-            method = clazz.getDeclaredMethod("getCatalogTable");
-            method.setAccessible(true);
-            table = (CatalogTable) method.invoke(context);
-        } catch (Exception e) {
-            LOGGER.error(e.getMessage(), e);
-        }
-        TableSchema physicalSchema =
-            TableSchemaUtils.getPhysicalSchema(table.getSchema());
-        return new LoggerSink(options.get(PRINT_IDENTIFIER), physicalSchema);
-    }
+	@Override
+	public Set<ConfigOption<?>> optionalOptions() {
+		Set<ConfigOption<?>> optionalOptions = new HashSet<>();
+		optionalOptions.add(PRINT_IDENTIFIER);
+		return optionalOptions;
+	}
 
-    private static class LoggerSink implements DynamicTableSink {
+	@Override
+	public DynamicTableSink createDynamicTableSink(Context context) {
+		final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
+		final ReadableConfig options = helper.getOptions();
+		helper.validate();
+		Class clazz = context.getClass();
+		Method method = null;
+		CatalogTable table = null;
+		try {
+			method = clazz.getDeclaredMethod("getCatalogTable");
+			method.setAccessible(true);
+			table = (CatalogTable) method.invoke(context);
+		} catch (Exception e) {
+			LOGGER.error(e.getMessage(), e);
+		}
+		TableSchema physicalSchema =
+			TableSchemaUtils.getPhysicalSchema(table.getSchema());
+		return new LoggerSink(options.get(PRINT_IDENTIFIER), physicalSchema);
+	}
 
-        private final String printIdentifier;
-        private final TableSchema tableSchema;
+	private static class LoggerSink implements DynamicTableSink {
 
-        public LoggerSink(String printIdentifier, TableSchema tableSchema) {
-            this.printIdentifier = printIdentifier;
-            this.tableSchema = tableSchema;
-        }
+		private final String printIdentifier;
+		private final TableSchema tableSchema;
 
-        @Override
-        public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
-            ChangelogMode.Builder builder = ChangelogMode.newBuilder();
-            for (RowKind kind : requestedMode.getContainedKinds()) {
-                if (kind != RowKind.UPDATE_BEFORE) {
-                    builder.addContainedKind(kind);
-                }
-            }
-            return builder.build();
-        }
+		public LoggerSink(String printIdentifier, TableSchema tableSchema) {
+			this.printIdentifier = printIdentifier;
+			this.tableSchema = tableSchema;
+		}
 
-        @Override
-        public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
-            Slf4jSink.Builder builder = Slf4jSink.builder().setFieldDataTypes(tableSchema.getFieldDataTypes()).setPrintIdentifier(printIdentifier);
-            return SinkFunctionProvider.of(builder.build());
-        }
+		@Override
+		public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
+			ChangelogMode.Builder builder = ChangelogMode.newBuilder();
+			for (RowKind kind : requestedMode.getContainedKinds()) {
+				if (kind != RowKind.UPDATE_BEFORE) {
+					builder.addContainedKind(kind);
+				}
+			}
+			return builder.build();
+		}
 
-        @Override
-        public DynamicTableSink copy() {
-            return new LoggerSink(printIdentifier, tableSchema);
-        }
+		@Override
+		public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
+			Slf4jSink.Builder builder = Slf4jSink.builder().setFieldDataTypes(tableSchema.getFieldDataTypes()).setPrintIdentifier(printIdentifier);
+			return SinkFunctionProvider.of(builder.build());
+		}
 
-        @Override
-        public String asSummaryString() {
-            return "Logger";
-        }
-    }
+		@Override
+		public DynamicTableSink copy() {
+			return new LoggerSink(printIdentifier, tableSchema);
+		}
+
+		@Override
+		public String asSummaryString() {
+			return "Logger";
+		}
+	}
 }
 
 class Slf4jSink<T> implements SinkFunction<T> {
-    private static final long serialVersionUID = 1L;
+	private static final long serialVersionUID = 1L;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Slf4jSink.class);
-    private final String printIdentifier;
-    private final RowData.FieldGetter[] fieldGetters;
-    private static final String NULL_VALUE = "null";
+	private static final Logger LOGGER = LoggerFactory.getLogger(Slf4jSink.class);
+	private final String printIdentifier;
+	private final RowData.FieldGetter[] fieldGetters;
+	private static final String NULL_VALUE = "null";
 
 
-    public Slf4jSink(String printIdentifier, LogicalType[] logicalTypes) {
-        this.printIdentifier = printIdentifier;
-        this.fieldGetters = new RowData.FieldGetter[logicalTypes.length];
-        for (int i = 0; i < logicalTypes.length; i++) {
-            fieldGetters[i] = createFieldGetter(logicalTypes[i], i);
-        }
-    }
+	public Slf4jSink(String printIdentifier, LogicalType[] logicalTypes) {
+		this.printIdentifier = printIdentifier;
+		this.fieldGetters = new RowData.FieldGetter[logicalTypes.length];
+		for (int i = 0; i < logicalTypes.length; i++) {
+			fieldGetters[i] = createFieldGetter(logicalTypes[i], i);
+		}
+	}
 
-    public String toString(RowData row) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(row.getRowKind().shortString()).append("(");
+	public String toString(RowData row) {
+		StringBuilder sb = new StringBuilder();
+		sb.append(row.getRowKind().shortString()).append("(");
 
-        for (int i = 0; i < row.getArity() && i < fieldGetters.length; ++i) {
-            if (i != 0) {
-                sb.append(",");
-            }
-            Object field = fieldGetters[i].getFieldOrNull(row);
-            if (field == null) {
-                field = NULL_VALUE;
-            }
-            sb.append(StringUtils.arrayAwareToString(field));
-        }
+		for (int i = 0; i < row.getArity() && i < fieldGetters.length; ++i) {
+			if (i != 0) {
+				sb.append(",");
+			}
+			Object field = fieldGetters[i].getFieldOrNull(row);
+			if (field == null) {
+				field = NULL_VALUE;
+			}
+			sb.append(StringUtils.arrayAwareToString(field));
+		}
 
-        sb.append(")");
-        return sb.toString();
-    }
+		sb.append(")");
+		return sb.toString();
+	}
 
-    @Override
-    public void invoke(T value, Context context) {
-        StringBuilder builder = new StringBuilder();
-        builder.append(printIdentifier);
-        RowData row = (RowData)value;
-        builder.append("-toString: ");
-        builder.append(toString(row));
-        LOGGER.info(builder.toString());
-    }
+	@Override
+	public void invoke(T value, Context context) {
+		StringBuilder builder = new StringBuilder();
+		builder.append(printIdentifier);
+		RowData row = (RowData) value;
+		builder.append("-toString: ");
+		builder.append(toString(row));
+		LOGGER.info(builder.toString());
+	}
 
-    /**
-     * A builder used to set parameters to the output format's configuration in a fluent way.
-     *
-     * @return builder
-     */
-    public static Builder builder() {
-        return new Builder();
-    }
+	/**
+	 * A builder used to set parameters to the output format's configuration in a fluent way.
+	 *
+	 * @return builder
+	 */
+	public static Builder builder() {
+		return new Builder();
+	}
 
-    /** Builder for {@link Slf4jSink}. */
-    public static class Builder {
-        private String printIdentifier;
-        private DataType[] fieldDataTypes;
+	/**
+	 * Builder for {@link Slf4jSink}.
+	 */
+	public static class Builder {
+		private String printIdentifier;
+		private DataType[] fieldDataTypes;
 
-        public Builder() {
-        }
+		public Builder() {
+		}
 
-        public Builder setFieldDataTypes(DataType[] fieldDataTypes) {
-            this.fieldDataTypes = fieldDataTypes;
-            return this;
-        }
+		public Builder setFieldDataTypes(DataType[] fieldDataTypes) {
+			this.fieldDataTypes = fieldDataTypes;
+			return this;
+		}
 
-        public Builder setPrintIdentifier(String printIdentifier) {
-            this.printIdentifier = printIdentifier;
-            return this;
-        }
+		public Builder setPrintIdentifier(String printIdentifier) {
+			this.printIdentifier = printIdentifier;
+			return this;
+		}
 
-        public Slf4jSink build() {
-            final LogicalType[] logicalTypes =
-                Arrays.stream(fieldDataTypes)
-                    .map(DataType::getLogicalType)
-                    .toArray(LogicalType[]::new);
-            return new Slf4jSink(printIdentifier, logicalTypes);
-        }
-    }
+		public Slf4jSink build() {
+			final LogicalType[] logicalTypes =
+				Arrays.stream(fieldDataTypes)
+					.map(DataType::getLogicalType)
+					.toArray(LogicalType[]::new);
+			return new Slf4jSink(printIdentifier, logicalTypes);
+		}
+	}
 }
