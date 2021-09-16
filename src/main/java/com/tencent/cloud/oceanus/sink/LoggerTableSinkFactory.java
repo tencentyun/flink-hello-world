@@ -24,10 +24,13 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.table.api.TableSchema;
+import org.apache.flink.table.catalog.CatalogTable;
+import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkFunctionProvider;
 import org.apache.flink.table.data.RowData;
+import org.apache.flink.table.factories.DynamicTableFactory;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.types.DataType;
@@ -38,6 +41,7 @@ import org.apache.flink.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -50,6 +54,8 @@ import static org.apache.flink.table.data.RowData.createFieldGetter;
  */
 @PublicEvolving
 public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LoggerTableSinkFactory.class);
 
     public static final String IDENTIFIER = "logger";
     public static final ConfigOption<String> PRINT_IDENTIFIER = ConfigOptions
@@ -79,9 +85,18 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
         final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
         final ReadableConfig options = helper.getOptions();
         helper.validate();
+        Class clazz = context.getClass();
+        Method m1 = null;
+        CatalogTable table = null;
+        try {
+            m1 = clazz.getDeclaredMethod("getCatalogTable");
+            m1.setAccessible(true);
+            table = (CatalogTable) m1.invoke(context);
+        } catch (Exception e) {
+            LOGGER.error(e.getMessage(), e);
+        }
         TableSchema physicalSchema =
-            TableSchemaUtils.getPhysicalSchema(context.getCatalogTable().getSchema());
-
+            TableSchemaUtils.getPhysicalSchema(table.getSchema());
         return new LoggerSink(options.get(PRINT_IDENTIFIER), physicalSchema);
     }
 
@@ -205,5 +220,4 @@ class Slf4jSink<T> implements SinkFunction<T> {
             return new Slf4jSink(printIdentifier, logicalTypes);
         }
     }
-
 }
