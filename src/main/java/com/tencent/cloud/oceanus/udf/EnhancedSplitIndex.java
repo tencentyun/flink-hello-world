@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 
 /**
  * 增强版的 ENHANCED_SPLIT_INDEX, 对连续的分隔符会如实处理, 例如输入 "1,2,,3" 会从 ["1","2","","3"] 中取字段
- * Flink 自带的 SPLIT_INDEX 函数会把多个分隔符当作一个, 例如输入 "1,2,,3" 会从 ["1","2","3"] 中取字段
+ * Oceanus 旧版的 SPLIT_INDEX 函数会把多个分隔符当作一个, 例如输入 "1,2,,3" 会从 ["1","2","3"] 中取字段, 后续版本会改用 Flink 的逻辑（与本文件相同）
  *
  * SQL 代码声明方式:
  * CREATE TEMPORARY SYSTEM FUNCTION ENHANCED_SPLIT_INDEX AS 'com.tencent.cloud.oceanus.udf.EnhancedSplitIndex' LANGUAGE JAVA;
