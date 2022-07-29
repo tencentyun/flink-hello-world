@@ -25,12 +25,10 @@ import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.catalog.CatalogTable;
-import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.sink.DynamicTableSink;
 import org.apache.flink.table.connector.sink.SinkFunctionProvider;
 import org.apache.flink.table.data.RowData;
-import org.apache.flink.table.factories.DynamicTableFactory;
 import org.apache.flink.table.factories.DynamicTableSinkFactory;
 import org.apache.flink.table.factories.FactoryUtil;
 import org.apache.flink.table.types.DataType;
@@ -64,6 +62,12 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 		.defaultValue("")
 		.withDescription("Message that identify logger and is prefixed to the output of the value.");
 
+	public static final ConfigOption<Boolean> ALL_CHANGELOG_MODE = ConfigOptions
+			.key("all-changelog-mode")
+			.booleanType()
+			.defaultValue(false)
+			.withDescription("Whether to accept all changelog mode.");
+
 	@Override
 	public String factoryIdentifier() {
 		return IDENTIFIER;
@@ -78,6 +82,7 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 	public Set<ConfigOption<?>> optionalOptions() {
 		Set<ConfigOption<?>> optionalOptions = new HashSet<>();
 		optionalOptions.add(PRINT_IDENTIFIER);
+		optionalOptions.add(ALL_CHANGELOG_MODE);
 		return optionalOptions;
 	}
 
@@ -86,8 +91,8 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 		final FactoryUtil.TableFactoryHelper helper = FactoryUtil.createTableFactoryHelper(this, context);
 		final ReadableConfig options = helper.getOptions();
 		helper.validate();
-		Class clazz = context.getClass();
-		Method method = null;
+		Class<?> clazz = context.getClass();
+		Method method;
 		CatalogTable table = null;
 		try {
 			method = clazz.getDeclaredMethod("getCatalogTable");
@@ -98,21 +103,33 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 		}
 		TableSchema physicalSchema =
 			TableSchemaUtils.getPhysicalSchema(table.getSchema());
-		return new LoggerSink(options.get(PRINT_IDENTIFIER), physicalSchema);
+		return new LoggerSink(
+				table.getSchema().toRowDataType(),
+				physicalSchema,
+				options.get(PRINT_IDENTIFIER),
+				options.get(ALL_CHANGELOG_MODE));
 	}
 
 	private static class LoggerSink implements DynamicTableSink {
 
 		private final String printIdentifier;
 		private final TableSchema tableSchema;
+		private final boolean allChangeLogMode;
+		private final DataType type;
 
-		public LoggerSink(String printIdentifier, TableSchema tableSchema) {
+		public LoggerSink(DataType type, TableSchema tableSchema, String printIdentifier, boolean allChangeLogMode) {
+			this.type = type;
 			this.printIdentifier = printIdentifier;
 			this.tableSchema = tableSchema;
+			this.allChangeLogMode = allChangeLogMode;
 		}
 
 		@Override
 		public ChangelogMode getChangelogMode(ChangelogMode requestedMode) {
+			if (allChangeLogMode) {
+				return ChangelogMode.all();
+			}
+
 			ChangelogMode.Builder builder = ChangelogMode.newBuilder();
 			for (RowKind kind : requestedMode.getContainedKinds()) {
 				if (kind != RowKind.UPDATE_BEFORE) {
@@ -124,13 +141,17 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 
 		@Override
 		public SinkRuntimeProvider getSinkRuntimeProvider(Context context) {
-			Slf4jSink.Builder builder = Slf4jSink.builder().setFieldDataTypes(tableSchema.getFieldDataTypes()).setPrintIdentifier(printIdentifier);
+			DataStructureConverter converter = context.createDataStructureConverter(type);
+			Slf4jSink.Builder<RowData> builder = Slf4jSink.<RowData>builder()
+					.setFieldDataTypes(tableSchema.getFieldDataTypes())
+					.setPrintIdentifier(printIdentifier)
+					.setConverter(converter);
 			return SinkFunctionProvider.of(builder.build());
 		}
 
 		@Override
 		public DynamicTableSink copy() {
-			return new LoggerSink(printIdentifier, tableSchema);
+			return new LoggerSink(type, tableSchema, printIdentifier, allChangeLogMode);
 		}
 
 		@Override
@@ -147,42 +168,26 @@ class Slf4jSink<T> implements SinkFunction<T> {
 	private final String printIdentifier;
 	private final RowData.FieldGetter[] fieldGetters;
 	private static final String NULL_VALUE = "null";
+	private final DynamicTableSink.DataStructureConverter converter;
 
-
-	public Slf4jSink(String printIdentifier, LogicalType[] logicalTypes) {
+	public Slf4jSink(String printIdentifier,
+	                 LogicalType[] logicalTypes,
+	                 DynamicTableSink.DataStructureConverter converter) {
 		this.printIdentifier = printIdentifier;
 		this.fieldGetters = new RowData.FieldGetter[logicalTypes.length];
 		for (int i = 0; i < logicalTypes.length; i++) {
 			fieldGetters[i] = createFieldGetter(logicalTypes[i], i);
 		}
-	}
-
-	public String toString(RowData row) {
-		StringBuilder sb = new StringBuilder();
-		sb.append(row.getRowKind().shortString()).append("(");
-
-		for (int i = 0; i < row.getArity() && i < fieldGetters.length; ++i) {
-			if (i != 0) {
-				sb.append(",");
-			}
-			Object field = fieldGetters[i].getFieldOrNull(row);
-			if (field == null) {
-				field = NULL_VALUE;
-			}
-			sb.append(StringUtils.arrayAwareToString(field));
-		}
-
-		sb.append(")");
-		return sb.toString();
+		this.converter = converter;
 	}
 
 	@Override
 	public void invoke(T value, Context context) {
+		Object data = converter.toExternal(value);
 		StringBuilder builder = new StringBuilder();
 		builder.append(printIdentifier);
-		RowData row = (RowData) value;
 		builder.append("-toString: ");
-		builder.append(toString(row));
+		builder.append(data);
 		LOGGER.info(builder.toString());
 	}
 
@@ -191,36 +196,42 @@ class Slf4jSink<T> implements SinkFunction<T> {
 	 *
 	 * @return builder
 	 */
-	public static Builder builder() {
-		return new Builder();
+	public static <T> Builder<T> builder() {
+		return new Builder<>();
 	}
 
 	/**
 	 * Builder for {@link Slf4jSink}.
 	 */
-	public static class Builder {
+	public static class Builder<T> {
 		private String printIdentifier;
 		private DataType[] fieldDataTypes;
+		private DynamicTableSink.DataStructureConverter converter;
 
 		public Builder() {
 		}
 
-		public Builder setFieldDataTypes(DataType[] fieldDataTypes) {
+		public Builder<T> setFieldDataTypes(DataType[] fieldDataTypes) {
 			this.fieldDataTypes = fieldDataTypes;
 			return this;
 		}
 
-		public Builder setPrintIdentifier(String printIdentifier) {
+		public Builder<T> setPrintIdentifier(String printIdentifier) {
 			this.printIdentifier = printIdentifier;
 			return this;
 		}
 
-		public Slf4jSink build() {
+		public Builder<T> setConverter(DynamicTableSink.DataStructureConverter converter) {
+			this.converter = converter;
+			return this;
+		}
+
+		public Slf4jSink<T> build() {
 			final LogicalType[] logicalTypes =
 				Arrays.stream(fieldDataTypes)
 					.map(DataType::getLogicalType)
 					.toArray(LogicalType[]::new);
-			return new Slf4jSink(printIdentifier, logicalTypes);
+			return new Slf4jSink<>(printIdentifier, logicalTypes, converter);
 		}
 	}
 }
