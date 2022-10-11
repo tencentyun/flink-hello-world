@@ -34,7 +34,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/** ARRAY_AGG 基类. */
+/**
+ * ARRAY_AGG 基类，参考内置 UDF 实现，ListAggWithRetractAggFunction 和 CollectAggFunction.
+ *
+ * @param <T> Array 字段类型.
+ */
 public abstract class ArrayAgg<T>
         extends AggregateFunction<ArrayData, ArrayAgg.ArrayAggAccumulator<T>> {
 
