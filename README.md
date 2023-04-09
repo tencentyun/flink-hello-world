@@ -16,6 +16,8 @@ Flink 示例程序包（自定义函数 UDF、自定义 Source 和 Sink 等）�
 3. PrintChar
 4. EnhancedSplitIndex
 5. ArrayAgg (示例参考 IntArrayAgg, RowArrayAgg1)
+6. Exploded
+7. StrToArray
 
 
 ## Sink 示例
