@@ -20,10 +20,13 @@ package com.tencent.cloud.oceanus.sink;
 
 import com.google.common.util.concurrent.RateLimiter;
 import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
+import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.table.api.TableSchema;
 import org.apache.flink.table.catalog.CatalogTable;
@@ -106,14 +109,12 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 		final ReadableConfig options = helper.getOptions();
 		helper.validate();
 		Class<?> clazz = context.getClass();
-		Method method;
 		CatalogTable table = null;
 		try {
-			method = clazz.getDeclaredMethod("getCatalogTable");
-			method.setAccessible(true);
-			table = (CatalogTable) method.invoke(context);
+			Method method = clazz.getDeclaredMethod("getCatalogTable");
+			table = (CatalogTable) method.invoke(context); // to be compatible with older Flink versions
 		} catch (Exception e) {
-			LOGGER.error(e.getMessage(), e);
+			LOGGER.error("Failed to get catalog table", e);
 		}
 		TableSchema physicalSchema =
 				TableSchemaUtils.getPhysicalSchema(table.getSchema());
@@ -191,19 +192,21 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
 @SuppressWarnings("UnstableApiUsage")
 class Slf4jSink<T> extends RichSinkFunction<T> {
 	private static final long serialVersionUID = 1L;
-
 	private static final Logger LOGGER = LoggerFactory.getLogger(Slf4jSink.class);
 	private final String printIdentifier;
 	private final DynamicTableSink.DataStructureConverter converter;
 	private final int recordsPerSecond;
 	private final boolean muteOutput;
 	private transient RateLimiter rateLimiter;
+	private Counter numberOfInsertRecords;
+	private Counter numberOfUpdateBeforeRecords;
+	private Counter numberOfUpdateAfterRecords;
+	private Counter numberOfDeleteRecords;
 
 	public Slf4jSink(String printIdentifier,
 	                 DynamicTableSink.DataStructureConverter converter,
 	                 int recordsPerSecond,
 	                 boolean muteOutput) {
-
 		this.printIdentifier = printIdentifier;
 		this.converter = converter;
 		this.recordsPerSecond = recordsPerSecond;
@@ -212,6 +215,19 @@ class Slf4jSink<T> extends RichSinkFunction<T> {
 
 	@Override
 	public void open(Configuration parameters) throws Exception {
+		MetricGroup metricGroup = null;
+		try {
+			Method method = RuntimeContext.class.getDeclaredMethod("getMetricGroup");
+			metricGroup = (MetricGroup) method.invoke(getRuntimeContext()); // to be compatible with older Flink versions
+
+			this.numberOfInsertRecords = metricGroup.counter("numberOfInsertRecords");
+			this.numberOfUpdateBeforeRecords = metricGroup.counter("numberOfUpdateBeforeRecords");
+			this.numberOfUpdateAfterRecords = metricGroup.counter("numberOfUpdateAfterRecords");
+			this.numberOfDeleteRecords = metricGroup.counter("numberOfDeleteRecords");
+		} catch (Exception e) {
+			LOGGER.error("Failed to get metric group", e);
+		}
+
 		if (recordsPerSecond > 0) {
 			LOGGER.info("Sink output rate is limited to {} records per second.", recordsPerSecond);
 			rateLimiter = RateLimiter.create(recordsPerSecond);
@@ -228,9 +244,39 @@ class Slf4jSink<T> extends RichSinkFunction<T> {
 			rateLimiter.acquire();
 		}
 
+		markRecordCountByType(value);
+
 		if (!muteOutput) {
 			Object data = converter.toExternal(value);
 			LOGGER.info("{}-toString: {}", printIdentifier, data);
+		}
+	}
+
+	private void markRecordCountByType(T record) {
+		if (!(record instanceof RowData)) {
+			return;
+		}
+
+		if (numberOfInsertRecords == null) {
+			return;
+		}
+
+		switch (((RowData) record).getRowKind()) {
+			case INSERT:
+				numberOfInsertRecords.inc();
+				break;
+			case UPDATE_BEFORE:
+				numberOfUpdateBeforeRecords.inc();
+				break;
+			case UPDATE_AFTER:
+				numberOfUpdateAfterRecords.inc();
+				break;
+			case DELETE:
+				numberOfDeleteRecords.inc();
+				break;
+			default:
+				LOGGER.debug("Unsupported row kind type {}", ((RowData) record).getRowKind());
+				break;
 		}
 	}
 
