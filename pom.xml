@@ -25,6 +25,7 @@
         <slf4j.version>1.7.30</slf4j.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spotless.version>2.4.2</spotless.version>
     </properties>
 
     <dependencies>
@@ -68,6 +69,7 @@
             <artifactId>guava</artifactId>
             <version>31.1-jre</version>
         </dependency>
+
     </dependencies>
 
     <build>
@@ -123,6 +125,37 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <version>1.7</version>
+                            <style>AOSP</style>
+                        </googleJavaFormat>
+
+                        <!-- \# refers to the static imports -->
+                        <importOrder>
+                            <order>org.apache.flink,org.apache.flink.shaded,,javax,java,scala,\#</order>
+                        </importOrder>
+
+                        <removeUnusedImports />
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
         </plugins>
 
         <!-- If you want to use Java 8 Lambda Expressions uncomment the following
