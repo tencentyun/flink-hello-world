@@ -99,6 +99,7 @@ public class LoggerTableSinkFactory implements DynamicTableSinkFactory {
         CatalogTable table = null;
         try {
             Method method = clazz.getDeclaredMethod("getCatalogTable");
+            method.setAccessible(true);
             table =
                     (CatalogTable)
                             method.invoke(context); // to be compatible with older Flink versions
